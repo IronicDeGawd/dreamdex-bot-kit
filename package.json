@@ -15,6 +15,8 @@
   "scripts": {
     "postinstall": "npm run build",
     "quickstart": "node scripts/quickstart.mjs",
+    "dashboard": "node dashboard/server.mjs",
+    "start": "node dashboard/server.mjs",
     "build": "npm run build -w @dreamdex-bot-kit/core",
     "typecheck": "npm run build && npm run typecheck --workspaces --if-present"
   }

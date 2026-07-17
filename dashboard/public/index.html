@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>bot-kit dashboard</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, system-ui, sans-serif; margin: 0; padding: 1.5rem; max-width: 1100px; margin-inline: auto; }
+  h1 { font-size: 1.1rem; margin: 0 0 1rem; }
+  h2 { font-size: 0.9rem; margin: 0; }
+  .layout { display: grid; grid-template-columns: 340px 1fr; gap: 1.5rem; align-items: start; }
+  @media (max-width: 800px) {
+    .layout { grid-template-columns: 1fr; }
+    #log { height: 50vh; }
+  }
+  fieldset { border: 1px solid #8884; border-radius: 6px; margin: 0 0 0.75rem; padding: 0.6rem 0.8rem; }
+  legend { font-size: 0.75rem; text-transform: uppercase; opacity: 0.7; padding: 0 0.3rem; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin: 0.3rem 0; font-size: 0.85rem; cursor: help; }
+  .row span { flex: 1; }
+  .row input[type="text"], .row input[type="number"], .row select { width: 9rem; font: inherit; padding: 3px 5px; border-radius: 4px; border: 1px solid #8886; }
+  label.row { cursor: pointer; padding: 2px 0; }
+  label.row input[type="checkbox"] { width: auto; }
+  #strategyFields > div { display: none; }
+  #strategyFields > div.active { display: block; }
+  .actions { display: flex; align-items: center; gap: 0.5rem; margin: 0.75rem 0; }
+  button { font: inherit; padding: 0.5rem 1rem; cursor: pointer; border-radius: 6px; border: 1px solid #8884; transition: opacity 0.15s, background-color 0.15s; }
+  button:hover:not(:disabled) { opacity: 0.85; }
+  button.start { background: #1a7f37; color: white; border: none; }
+  button.stop { background: #b91c1c; color: white; border: none; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid #4493f8; outline-offset: 2px; }
+  #liveBanner { display: none; background: #b91c1c; color: white; padding: 0.4rem 0.7rem; border-radius: 6px; font-size: 0.8rem; margin-bottom: 0.6rem; }
+  #liveBanner.show { display: block; }
+  #startError { color: #b91c1c; font-size: 0.8rem; }
+  #status { font-size: 0.8rem; opacity: 0.75; }
+  #log { background: #0d1117; color: #c9d1d9; padding: 0.75rem; border-radius: 6px; height: 80vh; overflow-y: auto; overflow-x: hidden; font: 12px/1.5 ui-monospace, monospace; white-space: pre-wrap; word-break: break-word; }
+  .logbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem; }
+</style>
+</head>
+<body>
+  <h1>dreamdex-bot-kit dashboard</h1>
+  <div class="layout">
+    <div>
+      <div id="liveBanner" role="alert">⚠ LIVE — DRY_RUN is off, Start Bot will place real orders</div>
+      <div class="actions">
+        <button id="startBtn" class="start">Start Bot</button>
+        <button id="stopBtn" class="stop" disabled>Stop Bot</button>
+        <span id="status" aria-live="polite">not running</span>
+      </div>
+      <p id="startError" role="alert" aria-live="polite"></p>
+
+      <fieldset>
+        <legend>Core</legend>
+        <div class="row" title="Trading pair to quote and trade, e.g. WETH:USDso">
+          <label for="SYMBOL">SYMBOL</label><input type="text" name="SYMBOL" id="SYMBOL" autocomplete="off" value="WETH:USDso" />
+        </div>
+        <label class="row" title="Log signals only — never places real orders" for="DRY_RUN">
+          <span>Dry run</span><input type="checkbox" id="DRY_RUN" checked />
+        </label>
+        <div class="row" title="Seconds between each price check">
+          <label for="POLL_S">POLL_S</label><input type="number" name="POLL_S" id="POLL_S" autocomplete="off" min="1" />
+        </div>
+        <div class="row" title="How many recent ticks form the rolling mean (mean-reversion)">
+          <label for="LOOKBACK">LOOKBACK</label><input type="number" name="LOOKBACK" id="LOOKBACK" autocomplete="off" min="1" />
+        </div>
+        <div class="row" title="Buy when price dips this many bps below the rolling mean">
+          <label for="ENTRY_BPS">ENTRY_BPS</label><input type="number" name="ENTRY_BPS" id="ENTRY_BPS" autocomplete="off" step="0.1" />
+        </div>
+        <div class="row" title="Take-profit trigger, in bps above entry price">
+          <label for="TARGET_BPS">TARGET_BPS</label><input type="number" name="TARGET_BPS" id="TARGET_BPS" autocomplete="off" step="0.1" />
+        </div>
+        <div class="row" title="Stop-loss trigger, in bps below entry price">
+          <label for="STOP_BPS">STOP_BPS</label><input type="number" name="STOP_BPS" id="STOP_BPS" autocomplete="off" step="0.1" />
+        </div>
+        <div class="row" title="Minimum seconds to hold a position before it's allowed to exit">
+          <label for="MIN_HOLD_S">MIN_HOLD_S</label><input type="number" name="MIN_HOLD_S" id="MIN_HOLD_S" autocomplete="off" min="0" />
+        </div>
+        <div class="row" title="Order size in USD per trade leg">
+          <label for="LEG_USD">LEG_USD</label><input type="number" name="LEG_USD" id="LEG_USD" autocomplete="off" step="0.1" min="0" />
+        </div>
+        <div class="row" title="How far (bps) an IOC order crosses the book so it actually fills">
+          <label for="CROSS_BPS">CROSS_BPS</label><input type="number" name="CROSS_BPS" id="CROSS_BPS" autocomplete="off" step="0.1" />
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Strategy</legend>
+        <div class="row" title="Which decision logic the bot runs">
+          <label for="STRATEGY">STRATEGY</label>
+          <select id="STRATEGY" name="STRATEGY">
+            <option value="mean-reversion">mean-reversion</option>
+            <option value="momentum">momentum</option>
+            <option value="grid">grid</option>
+          </select>
+        </div>
+        <div id="strategyFields">
+          <div data-for="momentum">
+            <div class="row" title="Number of ticks in the momentum window">
+              <label for="MOM_WINDOW">MOM_WINDOW</label><input type="number" name="MOM_WINDOW" id="MOM_WINDOW" autocomplete="off" min="2" />
+            </div>
+            <div class="row" title="Momentum threshold (bps) to enter a trend">
+              <label for="MOM_ENTRY_BPS">MOM_ENTRY_BPS</label><input type="number" name="MOM_ENTRY_BPS" id="MOM_ENTRY_BPS" autocomplete="off" step="0.1" />
+            </div>
+            <div class="row" title="Momentum threshold (bps) below which the position exits as a faded move">
+              <label for="MOM_EXIT_BPS">MOM_EXIT_BPS</label><input type="number" name="MOM_EXIT_BPS" id="MOM_EXIT_BPS" autocomplete="off" step="0.1" />
+            </div>
+          </div>
+          <div data-for="grid">
+            <div class="row" title="Price step (bps) between grid buy/sell levels">
+              <label for="GRID_STEP_BPS">GRID_STEP_BPS</label><input type="number" name="GRID_STEP_BPS" id="GRID_STEP_BPS" autocomplete="off" step="0.1" />
+            </div>
+            <div class="row" title="Max USD held across open grid lots before new buys pause">
+              <label for="GRID_MAX_INVENTORY_USD">GRID_MAX_INVENTORY_USD</label><input type="number" name="GRID_MAX_INVENTORY_USD" id="GRID_MAX_INVENTORY_USD" autocomplete="off" min="0" />
+            </div>
+            <div class="row" title="Sit out if the bid/ask spread exceeds this many bps">
+              <label for="GRID_MAX_SPREAD_BPS">GRID_MAX_SPREAD_BPS</label><input type="number" name="GRID_MAX_SPREAD_BPS" id="GRID_MAX_SPREAD_BPS" autocomplete="off" step="0.1" />
+            </div>
+            <div class="row" title="Stop opening new buys after this much realized loss (USD) this session">
+              <label for="GRID_MAX_SESSION_LOSS_USD">GRID_MAX_SESSION_LOSS_USD</label><input type="number" name="GRID_MAX_SESSION_LOSS_USD" id="GRID_MAX_SESSION_LOSS_USD" autocomplete="off" min="0" />
+            </div>
+            <div class="row" title="Cut inventory and re-anchor if no sell triggers for this many seconds (0 disables)">
+              <label for="GRID_STUCK_TIMEOUT_S">GRID_STUCK_TIMEOUT_S</label><input type="number" name="GRID_STUCK_TIMEOUT_S" id="GRID_STUCK_TIMEOUT_S" autocomplete="off" min="0" />
+            </div>
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Dynamic Pair</legend>
+        <label class="row" title="Auto-pick the cheaper of the candidate pairs by spread, using depth as a tiebreaker" for="DYNAMIC_PAIR">
+          <span>DYNAMIC_PAIR</span><input type="checkbox" id="DYNAMIC_PAIR" />
+        </label>
+        <div class="row" title="Comma-separated pairs to compare, e.g. WETH:USDso,WBTC:USDso">
+          <label for="PAIR_CANDIDATES">PAIR_CANDIDATES</label><input type="text" name="PAIR_CANDIDATES" id="PAIR_CANDIDATES" autocomplete="off" value="WETH:USDso,WBTC:USDso" />
+        </div>
+        <div class="row" title="Re-check which pair is cheapest every N ticks — only while flat (no open position)">
+          <label for="PAIR_RECHECK_TICKS">PAIR_RECHECK_TICKS</label><input type="number" name="PAIR_RECHECK_TICKS" id="PAIR_RECHECK_TICKS" autocomplete="off" min="1" />
+        </div>
+        <div class="row" title="Order book levels to sum when scoring each pair's depth">
+          <label for="PAIR_DEPTH_LEVELS">PAIR_DEPTH_LEVELS</label><input type="number" name="PAIR_DEPTH_LEVELS" id="PAIR_DEPTH_LEVELS" autocomplete="off" min="1" />
+        </div>
+        <div class="row" title="Spread difference (bps) treated as a tie — book depth breaks it">
+          <label for="PAIR_TIE_BPS">PAIR_TIE_BPS</label><input type="number" name="PAIR_TIE_BPS" id="PAIR_TIE_BPS" autocomplete="off" step="0.1" />
+        </div>
+        <div class="row" title="Minimum book depth (USD) required to trust a pair's spread reading">
+          <label for="PAIR_MIN_DEPTH_USD">PAIR_MIN_DEPTH_USD</label><input type="number" name="PAIR_MIN_DEPTH_USD" id="PAIR_MIN_DEPTH_USD" autocomplete="off" min="0" />
+        </div>
+      </fieldset>
+    </div>
+
+    <div>
+      <div class="logbar">
+        <h2>Logs</h2>
+        <button id="clearBtn">Clear</button>
+      </div>
+      <div id="log" role="log" aria-label="Bot output"></div>
+    </div>
+  </div>
+
+<script>
+const NUMERIC_IDS = ["POLL_S","LOOKBACK","ENTRY_BPS","TARGET_BPS","STOP_BPS","MIN_HOLD_S","LEG_USD","CROSS_BPS",
+  "MOM_WINDOW","MOM_ENTRY_BPS","MOM_EXIT_BPS","GRID_STEP_BPS","GRID_MAX_INVENTORY_USD","GRID_MAX_SPREAD_BPS",
+  "GRID_MAX_SESSION_LOSS_USD","GRID_STUCK_TIMEOUT_S","PAIR_RECHECK_TICKS","PAIR_DEPTH_LEVELS","PAIR_TIE_BPS","PAIR_MIN_DEPTH_USD"];
+const TEXT_IDS = ["SYMBOL","PAIR_CANDIDATES"];
+
+const startBtn = document.getElementById("startBtn");
+const stopBtn = document.getElementById("stopBtn");
+const statusEl = document.getElementById("status");
+const startError = document.getElementById("startError");
+const liveBanner = document.getElementById("liveBanner");
+const logEl = document.getElementById("log");
+const strategySelect = document.getElementById("STRATEGY");
+const dryRunCheckbox = document.getElementById("DRY_RUN");
+
+function updateStrategyFields() {
+  document.querySelectorAll("#strategyFields > div").forEach((el) => {
+    el.classList.toggle("active", el.dataset.for === strategySelect.value);
+  });
+}
+function updateLiveBanner() {
+  liveBanner.classList.toggle("show", !dryRunCheckbox.checked);
+}
+strategySelect.addEventListener("change", updateStrategyFields);
+dryRunCheckbox.addEventListener("change", updateLiveBanner);
+updateStrategyFields();
+updateLiveBanner();
+
+function collectConfig() {
+  const config = { STRATEGY: strategySelect.value, DRY_RUN: dryRunCheckbox.checked ? "true" : "false" };
+  for (const id of TEXT_IDS) {
+    const v = document.getElementById(id).value.trim();
+    if (v) config[id] = v;
+  }
+  for (const id of NUMERIC_IDS) {
+    const v = document.getElementById(id).value.trim();
+    if (v !== "") config[id] = v;
+  }
+  config.DYNAMIC_PAIR = document.getElementById("DYNAMIC_PAIR").checked ? "true" : "false";
+  return config;
+}
+
+function applyDefaults(defaults) {
+  for (const id of TEXT_IDS.concat(NUMERIC_IDS)) {
+    const el = document.getElementById(id);
+    if (el && defaults[id] !== undefined) el.value = defaults[id];
+  }
+  if (defaults.STRATEGY) strategySelect.value = defaults.STRATEGY;
+  // Deliberately do NOT apply defaults.DRY_RUN — dashboard always starts dry-run-checked for safety.
+  if (defaults.DYNAMIC_PAIR !== undefined) document.getElementById("DYNAMIC_PAIR").checked = defaults.DYNAMIC_PAIR === "true";
+  updateStrategyFields();
+}
+
+function setRunning(running) {
+  startBtn.disabled = running;
+  startBtn.textContent = "Start Bot";
+  stopBtn.disabled = !running;
+  stopBtn.textContent = "Stop Bot";
+  statusEl.textContent = running ? "running" : "not running";
+}
+
+async function refreshStatus() {
+  const res = await fetch("/api/status");
+  const data = await res.json();
+  setRunning(data.running);
+}
+
+startBtn.addEventListener("click", async () => {
+  startError.textContent = "";
+  startBtn.disabled = true;
+  startBtn.textContent = "Starting…";
+  try {
+    const res = await fetch("/api/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ config: collectConfig() }),
+    });
+    if (res.ok) { setRunning(true); return; }
+    const err = await res.json();
+    startError.textContent = `Couldn't start: ${err.error}`;
+  } catch (e) {
+    startError.textContent = `Couldn't start: ${e.message}`;
+  }
+  setRunning(false);
+});
+
+stopBtn.addEventListener("click", async () => {
+  stopBtn.disabled = true;
+  stopBtn.textContent = "Stopping…";
+  const res = await fetch("/api/stop", { method: "POST" });
+  if (res.ok || res.status === 404) setRunning(false);
+  else { stopBtn.disabled = false; stopBtn.textContent = "Stop Bot"; }
+});
+
+document.getElementById("clearBtn").addEventListener("click", () => { logEl.textContent = ""; });
+
+function appendLog(line) {
+  const stuckToBottom = logEl.scrollTop + logEl.clientHeight >= logEl.scrollHeight - 10;
+  logEl.textContent += line + "\n";
+  if (stuckToBottom) logEl.scrollTop = logEl.scrollHeight;
+}
+
+const es = new EventSource("/api/logs");
+es.onmessage = (e) => appendLog(JSON.parse(e.data));
+
+fetch("/api/defaults").then((r) => r.json()).then(applyDefaults);
+refreshStatus();
+</script>
+</body>
+</html>
